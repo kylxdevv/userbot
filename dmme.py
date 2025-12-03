@@ -2,12 +2,11 @@
 # scope: hikka_only
 # scope: hikka_min 1.6.0
 
-from typing import Dict, List, Set
+from typing import List
 import logging
-from datetime import datetime
+import html
 
 from hikkatl.types import Message
-from hikkatl.tl.types import MessageEntityMention, MessageEntityTextUrl
 from hikka import loader, utils
 
 logger = logging.getLogger(__name__)
@@ -19,19 +18,15 @@ class KeywordNotifierMod(loader.Module):
 
     strings = {
         "name": "KeywordNotifier",
-        "config_header": "🔔 <b>Настройки KeywordNotifier</b>\n\n",
         "keywords_empty": "🚫 Список ключевых слов пуст",
         "keywords_list": "📋 <b>Текущие ключевые слова:</b>\n",
         "keyword_added": "✅ Ключевое слово <code>{}</code> добавлено",
         "keyword_removed": "🗑️ Ключевое слово <code>{}</code> удалено",
         "keyword_exists": "⚠️ Ключевое слово <code>{}</code> уже существует",
         "keyword_not_found": "❌ Ключевое слово <code>{}</code> не найдено",
-        "chat_added": "✅ Чат <code>{}</code> добавлен в отслеживаемые",
-        "chat_removed": "🗑️ Чат <code>{}</code> удален из отслеживаемых",
-        "chat_exists": "⚠️ Чат <code>{}</code> уже отслеживается",
-        "chat_not_found": "❌ Чат <code>{}</code> не найден в отслеживаемых",
-        "chats_empty": "📭 Нет отслеживаемых чатов",
-        "chats_list": "👥 <b>Отслеживаемые чаты:</b>\n",
+        "chat_set": "✅ Чат для уведомлений установлен",
+        "chat_removed": "🗑️ Чат для уведомлений удален",
+        "chat_not_set": "❌ Чат для уведомлений не установлен",
         "notify_on": "🔔 Уведомления включены",
         "notify_off": "🔕 Уведомления выключены",
         "notify_already_on": "⚠️ Уведомления уже включены",
@@ -40,72 +35,40 @@ class KeywordNotifierMod(loader.Module):
 🤖 <b>KeywordNotifier - помощь по командам</b>
 
 <b>Основные команды:</b>
-• <code>.kn add</code> <слово> - добавить ключевое слово
-• <code>.kn remove</code> <слово> - удалить ключевое слово
-• <code>.kn list</code> - список ключевых слов
-• <code>.kn clear</code> - очистить все ключевые слова
+• <code>.knadd</code> <слово> - добавить ключевое слово
+• <code>.knremove</code> <слово> - удалить ключевое слово
+• <code>.knlist</code> - список ключевых слов
+• <code>.knclear</code> - очистить все ключевые слова
 
-<b>Управление чатами:</b>
-• <code>.kn chatadd</code> - добавить текущий чат в отслеживаемые
-• <code>.kn chatremove</code> - удалить текущий чат из отслеживаемых
-• <code>.kn chatlist</code> - список отслеживаемых чатов
-• <code>.kn chatclear</code> - очистить все чаты
+<b>Управление чатом для уведомлений:</b>
+• <code>.knchat</code> - установить текущий чат для уведомлений
+• <code>.knunchat</code> - удалить чат для уведомлений
+• <code>.knstatus</code> - информация о настройках
 
 <b>Настройки:</b>
-• <code>.kn on</code> - включить уведомления
-• <code>.kn off</code> - выключить уведомления
-• <code>.kn status</code> - текущий статус
-• <code>.kn config</code> - настройки модуля
+• <code>.knon</code> - включить уведомления
+• <code>.knoff</code> - выключить уведомления
 
 <b>Пример:</b>
-<code>.kn add срочно</code> - добавит слово "срочно"
-<code>.kn add важн</code> - добавит слово "важно"
+<code>.knadd срочно</code> - добавит слово "срочно"
+<code>.knadd важн</code> - добавит слово "важно"
         """,
     }
 
     strings_ru = {
-        "config_header": "🔔 <b>Настройки KeywordNotifier</b>\n\n",
         "keywords_empty": "🚫 Список ключевых слов пуст",
         "keywords_list": "📋 <b>Текущие ключевые слова:</b>\n",
         "keyword_added": "✅ Ключевое слово <code>{}</code> добавлено",
         "keyword_removed": "🗑️ Ключевое слово <code>{}</code> удалено",
         "keyword_exists": "⚠️ Ключевое слово <code>{}</code> уже существует",
         "keyword_not_found": "❌ Ключевое слово <code>{}</code> не найдено",
-        "chat_added": "✅ Чат <code>{}</code> добавлен в отслеживаемые",
-        "chat_removed": "🗑️ Чат <code>{}</code> удален из отслеживаемых",
-        "chat_exists": "⚠️ Чат <code>{}</code> уже отслеживается",
-        "chat_not_found": "❌ Чат <code>{}</code> не найден в отслеживаемых",
-        "chats_empty": "📭 Нет отслеживаемых чатов",
-        "chats_list": "👥 <b>Отслеживаемые чаты:</b>\n",
+        "chat_set": "✅ Чат для уведомлений установлен",
+        "chat_removed": "🗑️ Чат для уведомлений удален",
+        "chat_not_set": "❌ Чат для уведомлений не установлен",
         "notify_on": "🔔 Уведомления включены",
         "notify_off": "🔕 Уведомления выключены",
         "notify_already_on": "⚠️ Уведомления уже включены",
         "notify_already_off": "⚠️ Уведомления уже выключены",
-        "help_text": """
-🤖 <b>KeywordNotifier - помощь по командам</b>
-
-<b>Основные команды:</b>
-• <code>.kn add</code> <слово> - добавить ключевое слово
-• <code>.kn remove</code> <слово> - удалить ключевое слово
-• <code>.kn list</code> - список ключевых слов
-• <code>.kn clear</code> - очистить все ключевые слова
-
-<b>Управление чатами:</b>
-• <code>.kn chatadd</code> - добавить текущий чат в отслеживаемые
-• <code>.kn chatremove</code> - удалить текущий чат из отслеживаемых
-• <code>.kn chatlist</code> - список отслеживаемых чатов
-• <code>.kn chatclear</code> - очистить все чаты
-
-<b>Настройки:</b>
-• <code>.kn on</code> - включить уведомления
-• <code>.kn off</code> - выключить уведомления
-• <code>.kn status</code> - текущий статус
-• <code>.kn config</code> - настройки модуля
-
-<b>Пример:</b>
-<code>.kn add срочно</code> - добавит слово "срочно"
-<code>.kn add важн</code> - добавит слово "важно"
-        """,
     }
 
     def __init__(self):
@@ -119,11 +82,11 @@ class KeywordNotifierMod(loader.Module):
                 ),
             ),
             loader.ConfigValue(
-                "chats",
-                [],
-                lambda: "ID чатов для отслеживания",
-                validator=loader.validators.Series(
-                    validator=loader.validators.Integer()
+                "notify_chat",
+                None,
+                lambda: "ID чата для уведомлений",
+                validator=loader.validators.Union(
+                    [loader.validators.Integer(), loader.validators.NoneType()]
                 ),
             ),
             loader.ConfigValue(
@@ -171,12 +134,12 @@ class KeywordNotifierMod(loader.Module):
         if not self.config["enabled"]:
             return
 
-        # Проверяем, что сообщение из чата (не из лс с самим собой)
-        if not message.is_group and not message.is_channel:
+        # Проверяем, что есть чат для уведомлений
+        if not self.config["notify_chat"]:
             return
 
-        # Проверяем, отслеживается ли этот чат
-        if message.chat_id not in self.config["chats"]:
+        # Проверяем, что сообщение из группового чата или канала
+        if not message.is_group and not message.is_channel:
             return
 
         # Игнорируем свои сообщения, если настроено
@@ -219,31 +182,50 @@ class KeywordNotifierMod(loader.Module):
         
         try:
             # Получаем информацию о чате
-            chat = await message.get_chat()
-            chat_title = utils.get_display_name(chat)
+            chat = message.chat
+            chat_title = chat.title if hasattr(chat, 'title') else "Чат"
             
             # Получаем информацию об отправителе
-            sender = await message.get_sender()
-            sender_name = utils.get_display_name(sender) if sender else "Неизвестно"
+            sender = message.sender
+            if sender:
+                # Получаем username или first_name
+                if sender.username:
+                    sender_name = f"@{sender.username}"
+                elif sender.first_name:
+                    sender_name = sender.first_name
+                    if sender.last_name:
+                        sender_name += f" {sender.last_name}"
+                else:
+                    sender_name = "Неизвестно"
+            else:
+                sender_name = "Неизвестно"
             
             # Формируем ссылку на сообщение
-            msg_link = f"https://t.me/c/{str(message.chat_id).replace('-100', '')}/{message.id}"
+            if hasattr(chat, 'username') and chat.username:
+                chat_link = f"https://t.me/{chat.username}/{message.id}"
+            else:
+                # Для приватных чатов и супергрупп
+                chat_id = str(message.chat_id).replace('-100', '')
+                chat_link = f"https://t.me/c/{chat_id}/{message.id}"
             
             # Обрезаем текст если он слишком длинный
             text_preview = message.raw_text[:200] + "..." if len(message.raw_text) > 200 else message.raw_text
             
+            # Экранируем HTML символы
+            safe_text = html.escape(text_preview)
+            
             notification_text = (
                 f"🔔 <b>Обнаружено ключевое слово!</b>\n\n"
-                f"<b>Чат:</b> {chat_title}\n"
+                f"<b>Чат:</b> {html.escape(chat_title)}\n"
                 f"<b>Отправитель:</b> {sender_name}\n"
                 f"<b>Ключевые слова:</b> <code>{', '.join(keywords)}</code>\n"
-                f"<b>Сообщение:</b>\n<code>{utils.escape_html(text_preview)}</code>\n\n"
-                f"<a href='{msg_link}'>Перейти к сообщению</a>"
+                f"<b>Сообщение:</b>\n<code>{safe_text}</code>\n\n"
+                f"<a href='{chat_link}'>🔗 Перейти к сообщению</a>"
             )
             
-            # Отправляем уведомление себе
+            # Отправляем уведомление в прикрепленный чат
             await self._client.send_message(
-                "me",
+                self.config["notify_chat"],
                 notification_text,
                 parse_mode="HTML",
                 silent=False,
@@ -269,7 +251,7 @@ class KeywordNotifierMod(loader.Module):
         if keyword in self.config["keywords"]:
             await utils.answer(
                 message, 
-                self.strings("keyword_exists").format(utils.escape_html(keyword))
+                self.strings("keyword_exists").format(html.escape(keyword))
             )
             return
 
@@ -279,7 +261,7 @@ class KeywordNotifierMod(loader.Module):
         
         await utils.answer(
             message, 
-            self.strings("keyword_added").format(utils.escape_html(keyword))
+            self.strings("keyword_added").format(html.escape(keyword))
         )
 
     @loader.command(ru_doc="Удалить ключевое слово")
@@ -294,7 +276,7 @@ class KeywordNotifierMod(loader.Module):
         if keyword not in self.config["keywords"]:
             await utils.answer(
                 message, 
-                self.strings("keyword_not_found").format(utils.escape_html(keyword))
+                self.strings("keyword_not_found").format(html.escape(keyword))
             )
             return
 
@@ -304,7 +286,7 @@ class KeywordNotifierMod(loader.Module):
         
         await utils.answer(
             message, 
-            self.strings("keyword_removed").format(utils.escape_html(keyword))
+            self.strings("keyword_removed").format(html.escape(keyword))
         )
 
     @loader.command(ru_doc="Список ключевых слов")
@@ -316,7 +298,7 @@ class KeywordNotifierMod(loader.Module):
 
         keywords_list = self.strings("keywords_list")
         for i, keyword in enumerate(self.config["keywords"], 1):
-            keywords_list += f"{i}. <code>{utils.escape_html(keyword)}</code>\n"
+            keywords_list += f"{i}. <code>{html.escape(keyword)}</code>\n"
         
         await utils.answer(message, keywords_list)
 
@@ -326,75 +308,25 @@ class KeywordNotifierMod(loader.Module):
         self.config["keywords"] = []
         await utils.answer(message, "✅ Все ключевые слова удалены")
 
-    @loader.command(ru_doc="Добавить текущий чат в отслеживаемые")
-    async def knchataddcmd(self, message: Message):
-        """Добавить текущий чат в отслеживаемые"""
+    @loader.command(ru_doc="Установить чат для уведомлений")
+    async def knchatcmd(self, message: Message):
+        """Установить текущий чат для получения уведомлений"""
         chat_id = message.chat_id
-        
-        if chat_id in self.config["chats"]:
-            await utils.answer(
-                message, 
-                self.strings("chat_exists").format(chat_id)
-            )
-            return
-
-        chats = self.config["chats"].copy()
-        chats.append(chat_id)
-        self.config["chats"] = chats
+        self.config["notify_chat"] = chat_id
         
         await utils.answer(
             message, 
-            self.strings("chat_added").format(chat_id)
+            self.strings("chat_set")
         )
 
-    @loader.command(ru_doc="Удалить текущий чат из отслеживаемых")
-    async def knchatremovecmd(self, message: Message):
-        """Удалить текущий чат из отслеживаемых"""
-        chat_id = message.chat_id
-        
-        if chat_id not in self.config["chats"]:
-            await utils.answer(
-                message, 
-                self.strings("chat_not_found").format(chat_id)
-            )
-            return
-
-        chats = self.config["chats"].copy()
-        chats.remove(chat_id)
-        self.config["chats"] = chats
-        
+    @loader.command(ru_doc="Удалить чат для уведомлений")
+    async def knunchatcmd(self, message: Message):
+        """Удалить чат для уведомлений"""
+        self.config["notify_chat"] = None
         await utils.answer(
             message, 
-            self.strings("chat_removed").format(chat_id)
+            self.strings("chat_removed")
         )
-
-    @loader.command(ru_doc="Список отслеживаемых чатов")
-    async def knchatlistcmd(self, message: Message):
-        """Показать список отслеживаемых чатов"""
-        if not self.config["chats"]:
-            await utils.answer(message, self.strings("chats_empty"))
-            return
-
-        try:
-            chats_list = self.strings("chats_list")
-            
-            for i, chat_id in enumerate(self.config["chats"], 1):
-                try:
-                    chat = await self._client.get_entity(chat_id)
-                    chat_name = utils.get_display_name(chat)
-                    chats_list += f"{i}. {chat_name} (<code>{chat_id}</code>)\n"
-                except:
-                    chats_list += f"{i}. Неизвестный чат (<code>{chat_id}</code>)\n"
-            
-            await utils.answer(message, chats_list)
-        except Exception as e:
-            await utils.answer(message, f"❌ Ошибка: {str(e)}")
-
-    @loader.command(ru_doc="Очистить все чаты")
-    async def knchatclearcmd(self, message: Message):
-        """Очистить все чаты из отслеживания"""
-        self.config["chats"] = []
-        await utils.answer(message, "✅ Все чаты удалены из отслеживания")
 
     @loader.command(ru_doc="Включить уведомления")
     async def knoncmd(self, message: Message):
@@ -419,49 +351,37 @@ class KeywordNotifierMod(loader.Module):
     @loader.command(ru_doc="Текущий статус модуля")
     async def knstatuscmd(self, message: Message):
         """Показать текущий статус модуля"""
+        
+        # Получаем информацию о чате для уведомлений
+        notify_chat_info = "❌ Не установлен"
+        if self.config["notify_chat"]:
+            try:
+                chat = await self._client.get_entity(self.config["notify_chat"])
+                if hasattr(chat, 'title'):
+                    notify_chat_info = f"✅ {chat.title}"
+                elif hasattr(chat, 'username'):
+                    notify_chat_info = f"✅ @{chat.username}"
+                else:
+                    notify_chat_info = f"✅ ID: {self.config['notify_chat']}"
+            except:
+                notify_chat_info = f"✅ ID: {self.config['notify_chat']}"
+
         status_text = (
             f"🔔 <b>KeywordNotifier - Статус</b>\n\n"
             f"<b>Уведомления:</b> {'✅ Включены' if self.config['enabled'] else '❌ Выключены'}\n"
             f"<b>Ключевых слов:</b> {len(self.config['keywords'])}\n"
-            f"<b>Отслеживаемых чатов:</b> {len(self.config['chats'])}\n"
+            f"<b>Чат для уведомлений:</b> {notify_chat_info}\n"
             f"<b>Чувствительность к регистру:</b> {'✅ Да' if self.config['case_sensitive'] else '❌ Нет'}\n"
             f"<b>Точное совпадение:</b> {'✅ Да' if self.config['exact_match'] else '❌ Нет'}\n"
             f"<b>Уведомлять о своих сообщениях:</b> {'✅ Да' if self.config['notify_self'] else '❌ Нет'}\n"
             f"<b>Игнорировать команды:</b> {'✅ Да' if self.config['ignore_commands'] else '❌ Нет'}\n"
         )
         
-        await utils.answer(message, status_text)
-
-    @loader.command(ru_doc="Настройки модуля")
-    async def knconfigcmd(self, message: Message):
-        """Показать настройки модуля"""
-        config_text = self.strings("config_header")
-        
-        # Ключевые слова
         if self.config["keywords"]:
-            config_text += "<b>Ключевые слова:</b>\n"
-            for kw in self.config["keywords"][:10]:  # Показываем первые 10
-                config_text += f"• <code>{utils.escape_html(kw)}</code>\n"
-            if len(self.config["keywords"]) > 10:
-                config_text += f"... и ещё {len(self.config['keywords']) - 10}\n"
-        else:
-            config_text += "<b>Ключевые слова:</b> Нет\n"
+            status_text += f"\n<b>Ключевые слова:</b>\n"
+            for kw in self.config["keywords"][:5]:  # Показываем первые 5
+                status_text += f"• <code>{html.escape(kw)}</code>\n"
+            if len(self.config["keywords"]) > 5:
+                status_text += f"... и ещё {len(self.config['keywords']) - 5}\n"
         
-        config_text += "\n"
-        
-        # Чаты
-        if self.config["chats"]:
-            config_text += f"<b>Отслеживаемых чатов:</b> {len(self.config['chats'])}\n"
-        else:
-            config_text += "<b>Отслеживаемых чатов:</b> Нет\n"
-        
-        config_text += (
-            f"\n<b>Другие настройки:</b>\n"
-            f"• Уведомления: {'✅' if self.config['enabled'] else '❌'}\n"
-            f"• Регистр: {'✅' if self.config['case_sensitive'] else '❌'}\n"
-            f"• Точное совпадение: {'✅' if self.config['exact_match'] else '❌'}\n"
-            f"• Свои сообщения: {'✅' if self.config['notify_self'] else '❌'}\n"
-            f"• Игнорировать команды: {'✅' if self.config['ignore_commands'] else '❌'}\n"
-        )
-        
-        await utils.answer(message, config_text)
+        await utils.answer(message, status_text)
